@@ -30,7 +30,7 @@ sns.set(font=plt.rcParams['font.family'], style="whitegrid")
 
 # --- アプリの基本設定 ---
 st.set_page_config(page_title="AIセミナー全項目分析", layout="wide")
-st.title("🏗️ シビルカレッジ：AIセミナー詳細分析")
+st.title("🏗️ シビルウェブ：AIセミナーアンケート分析")
 
 # 万が一のエラーを画面に表示する設定
 def show_error(e):
@@ -129,3 +129,4 @@ if uploaded_file is not None:
 
     except Exception as e:
         show_error(e)
+
