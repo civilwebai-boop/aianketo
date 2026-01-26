@@ -8,11 +8,9 @@ import io
 import os
 import sys
 
-# --- 【最強の回避策】エラーの元になるライブラリを一切使わない ---
-# japanize_matplotlibを読み込まず、フォントファイルだけを直接使います
+# --- 【究極の回避策】エラーの元になるライブラリを一切使わない ---
 try:
     font_path = None
-    # 各バージョンのパスを総当たりで探す
     for v in ["3.13", "3.12", "3.11"]:
         p = f'/home/adminuser/venv/lib/python{v}/site-packages/japanize_matplotlib/fonts/ipaexg.ttf'
         if os.path.exists(p):
@@ -30,19 +28,13 @@ sns.set(font=plt.rcParams['font.family'], style="whitegrid")
 
 # --- アプリの基本設定 ---
 st.set_page_config(page_title="AIセミナー全項目分析", layout="wide")
-st.title("🏗️ シビルウェブ：AIセミナーアンケート分析")
-
-# 万が一のエラーを画面に表示する設定
-def show_error(e):
-    st.error(f"エラーが発生しました: {e}")
-    st.info("CSVの形式や、GitHubのファイル名（app.pyになっているか）を確認してください。")
+st.title("🏗️ シビルウェブ：AIセミナー詳細分析")
 
 uploaded_file = st.file_uploader("アンケート結果（CSV）をアップロードしてください", type="csv")
 
 if uploaded_file is not None:
     try:
         bytes_data = uploaded_file.getvalue()
-        # CSVの読み込み（#で始まる行を探してヘッダーにする）
         lines = bytes_data.decode("utf-8-sig").splitlines()
         header_idx = 0
         for i, line in enumerate(lines):
@@ -52,14 +44,12 @@ if uploaded_file is not None:
         
         df = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
 
-        # --- 列の特定（キーワードで探すことで、列がズレても動くようにする） ---
         def find_col(keywords):
             for col in df.columns:
                 if any(k in col for k in keywords):
                     return col
             return None
 
-        # L列〜S列に相当する項目を自動特定
         target_cols = {
             '年代': find_col(['年代']),
             '満足度': find_col(['満足度', 'いかがでしたか']),
@@ -71,7 +61,7 @@ if uploaded_file is not None:
             '今後の支援': find_col(['支援', '本格導入'])
         }
 
-        # 複数回答を集計する関数
+        # 複数回答用（割合も計算して表示）
         def plot_multi(col_name, title, color):
             if not col_name: return
             items = []
@@ -79,13 +69,19 @@ if uploaded_file is not None:
                 parts = str(row).replace('\r', '').split(';')
                 items.extend([p.strip() for p in parts if p.strip()])
             counts = pd.Series(Counter(items)).sort_values()
+            total_respondents = len(df[col_name].dropna())
             
             fig, ax = plt.subplots()
             counts.plot(kind='barh', ax=ax, color=color)
+            # 棒の横に割合(%)を表示
+            for i, v in enumerate(counts):
+                pct = (v / total_respondents) * 100
+                ax.text(v + 0.2, i, f'{v}人 ({pct:.1f}%)', va='center', fontsize=10)
+            
             st.subheader(f"📊 {title}")
             st.pyplot(fig)
 
-        # 1種類のみ回答を集計する関数
+        # 単一回答・円グラフ用
         def plot_single_pie(col_name, title):
             if not col_name: return
             fig, ax = plt.subplots()
@@ -94,10 +90,23 @@ if uploaded_file is not None:
             st.subheader(f"✅ {title}")
             st.pyplot(fig)
 
-        def plot_single_bar(col_name, title, color):
+        # 単一回答・棒グラフ用（★N列・P列向けに割合表示を追加）
+        def plot_single_bar_with_pct(col_name, title, color):
             if not col_name: return
+            counts = df[col_name].value_counts().sort_values()
+            total = counts.sum()
+            
             fig, ax = plt.subplots()
-            df[col_name].value_counts().sort_values().plot(kind='barh', ax=ax, color=color)
+            counts.plot(kind='barh', ax=ax, color=color)
+            
+            # 棒の横に「人数 (割合%)」を表示
+            for i, v in enumerate(counts):
+                pct = (v / total) * 100
+                ax.text(v + 0.2, i, f'{v}人 ({pct:.1f}%)', va='center', fontsize=10)
+            
+            # グラフの右側に余白を作る
+            ax.set_xlim(0, max(counts) * 1.3)
+            
             st.subheader(f"👷 {title}")
             st.pyplot(fig)
 
@@ -109,12 +118,15 @@ if uploaded_file is not None:
             with c1: plot_single_pie(target_cols['年代'], "年代")
             with c2: plot_single_pie(target_cols['満足度'], "セミナー満足度")
             
+            st.divider()
+            
             c3, c4 = st.columns(2)
-            with c3: plot_single_bar(target_cols['職域'], "参加者の職域", "skyblue")
-            with c4: plot_single_bar(target_cols['活用状況'], "現在のAI活用状況", "lightgreen")
+            # N列(職域)とP列(活用状況)を割合表示付きに変更
+            with c3: plot_single_bar_with_pct(target_cols['職域'], "参加者の職域 (N列)", "skyblue")
+            with c4: plot_single_bar_with_pct(target_cols['活用状況'], "現在のAI活用状況 (P列)", "lightgreen")
 
         with tab2:
-            st.info("複数回答の項目を集計しています")
+            st.info("複数回答の項目を集計しています（%は回答者数に対する割合）")
             c5, c6 = st.columns(2)
             with c5: plot_multi(target_cols['動機'], "参加の動機", "orange")
             with c6: plot_multi(target_cols['課題'], "業界の課題", "coral")
@@ -128,5 +140,4 @@ if uploaded_file is not None:
         st.success("全ての分析が完了しました！")
 
     except Exception as e:
-        show_error(e)
-
+        st.error(f"エラーが発生しました: {e}")
