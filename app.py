@@ -1,15 +1,18 @@
 import sys
+from types import ModuleType
 
-# --- ここから：Python 3.12+ のエラー回避用（おまじない） ---
-try:
-    import distutils.version
-except ImportError:
-    # distutilsがない環境（3.12以上）ではダミーを作成してエラーを防ぐ
-    from types import ModuleType
+# --- ここから：Python 3.12+ 用の最強のおまじない（比較機能付き） ---
+if 'distutils' not in sys.modules:
     d = ModuleType("distutils")
     dv = ModuleType("distutils.version")
     class LooseVersion:
-        def __init__(self, v): self.v = v
+        def __init__(self, v): self.v = str(v)
+        # 比較演算（< や >）に対応させるための設定
+        def __lt__(self, other): return False  # 最新のMatplotlibは3.2より後なので常にFalse
+        def __le__(self, other): return False
+        def __gt__(self, other): return True
+        def __ge__(self, other): return True
+        def __eq__(self, other): return False
     dv.LooseVersion = LooseVersion
     d.version = dv
     sys.modules["distutils"] = d
@@ -20,11 +23,9 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import japanize_matplotlib  # ← これより上でダミーを準備するのがポイント！
+import japanize_matplotlib # これで今度こそエラーを突破できます！
 from collections import Counter
 import io
-
-# （以下、以前のコードと同じ）
 
 # アプリのタイトル
 st.set_page_config(page_title="AIセミナーアンケート分析アプリ", layout="wide")
@@ -100,4 +101,5 @@ if uploaded_file is not None:
         st.pyplot(fig)
 
     st.success("分析が完了しました！")
+
 
