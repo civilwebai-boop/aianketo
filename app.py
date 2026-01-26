@@ -1,51 +1,51 @@
-import sys
-from types import ModuleType
-
-# --- 【究極版】Python 3.12/3.13用 エラー回避コード ---
-# japanize_matplotlibが内部で行う「バージョン比較」を強制的にパスさせます
-if 'distutils' not in sys.modules:
-    class LooseVersion(str):
-        def __repr__(self): return f"LooseVersion('{self}')"
-        def __lt__(self, other): return False
-        def __le__(self, other): return False
-        def __gt__(self, other): return True
-        def __ge__(self, other): return True
-        def __eq__(self, other): return False
-
-    distutils = ModuleType("distutils")
-    version = ModuleType("distutils.version")
-    version.LooseVersion = LooseVersion
-    distutils.version = version
-    sys.modules["distutils"] = distutils
-    sys.modules["distutils.version"] = version
-# --- ここまで ---
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.font_manager as fm
 from collections import Counter
 import io
+import os
 
-# 日本語化ライブラリの読み込み（エラーが出てもアプリを止めない設定）
-try:
-    import japanize_matplotlib
-except Exception:
-    pass # 万が一失敗しても、グラフを出すこと自体は優先する
+# --- 【解決策】ライブラリを直接使わず、フォントファイルだけ読み込む ---
+# japanize_matplotlibをimportするとエラーが出るため、インストールされたフォントファイルを直接指定します
+font_path = None
+# Streamlit Cloudの標準的なインストール先を探す
+possible_paths = [
+    '/home/adminuser/venv/lib/python3.13/site-packages/japanize_matplotlib/fonts/ipaexg.ttf',
+    '/home/adminuser/venv/lib/python3.12/site-packages/japanize_matplotlib/fonts/ipaexg.ttf',
+    '/home/adminuser/venv/lib/python3.11/site-packages/japanize_matplotlib/fonts/ipaexg.ttf'
+]
+
+for p in possible_paths:
+    if os.path.exists(p):
+        font_path = p
+        break
+
+if font_path:
+    fm.fontManager.addfont(font_path)
+    prop = fm.FontProperties(fname=font_path)
+    plt.rcParams['font.family'] = prop.get_name()
+else:
+    # フォントが見つからない場合の予備（文字化けする可能性がありますがアプリは動きます）
+    plt.rcParams['font.family'] = 'sans-serif'
+
+# グラフの見た目を整える
+sns.set(font=plt.rcParams['font.family'], style="whitegrid")
+# -------------------------------------------------------------------
 
 # アプリの基本設定
-st.set_page_config(page_title="AIセミナーアンケート分析 - シビルカレッジ", layout="wide")
+st.set_page_config(page_title="AIセミナー分析 - シビルカレッジ", layout="wide")
 st.title("🏗️ シビルカレッジ：AIセミナーアンケート分析")
-st.caption("CSVをアップロードするだけで、日本語の分析グラフを自動生成します。")
+st.caption("CSVをアップロードするだけで、日本語のグラフを自動生成します。")
 
 # --- ファイルアップロード ---
 uploaded_file = st.file_uploader("アンケート結果（CSV）をアップロードしてください", type="csv")
 
 if uploaded_file is not None:
-    # データの読み込み
     bytes_data = uploaded_file.getvalue()
-    # 文字コードやヘッダーの調整
     try:
+        # スプレッドシート形式のCSV読み込み（#で始まる行を飛ばす）
         lines = bytes_data.decode("utf-8-sig").splitlines()
         header_idx = -1
         for i, line in enumerate(lines):
@@ -54,10 +54,10 @@ if uploaded_file is not None:
                 break
         df = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
     except Exception as e:
-        st.error(f"データの読み込み中にエラーが発生しました: {e}")
+        st.error(f"データの読み込みエラー: {e}")
         st.stop()
 
-    # スプレッドシートの項目名（適宜修正してください）
+    # アンケートの列名
     cols = {
         'satisfaction': '本日のセミナーの内容はいかがでしたか？',
         'job': '現在の主な職域を教えてください。',
@@ -67,7 +67,7 @@ if uploaded_file is not None:
         'support': '今後、どのような支援があればAI本格導入・実務活用に移せそうですか？'
     }
 
-    # 集計用関数
+    # 複数回答を分解して集計する関数
     def split_and_count(column_name):
         items = []
         for row in df[column_name].dropna():
@@ -81,7 +81,7 @@ if uploaded_file is not None:
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("✅ セミナー満足度")
-        fig, ax = plt.subplots(figsize=(8, 8))
+        fig, ax = plt.subplots(figsize=(7, 7))
         df[cols['satisfaction']].value_counts().plot(kind='pie', autopct='%1.1f%%', startangle=140, ax=ax, counterclock=False)
         ax.set_ylabel("")
         st.pyplot(fig)
@@ -96,4 +96,18 @@ if uploaded_file is not None:
     st.divider()
 
     col3, col4 = st.columns(2)
-    with col
+    with col3:
+        st.subheader("📉 業界が抱える課題")
+        fig, ax = plt.subplots()
+        split_and_count(cols['challenges']).plot(kind='barh', ax=ax, color='coral')
+        ax.set_xlabel("回答数")
+        st.pyplot(fig)
+
+    with col4:
+        st.subheader("💡 AIに期待する解決内容")
+        fig, ax = plt.subplots()
+        split_and_count(cols['ai_needs']).plot(kind='barh', ax=ax, color='lightgreen')
+        ax.set_xlabel("回答数")
+        st.pyplot(fig)
+
+    st.success("全ての分析が完了しました。")
