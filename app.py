@@ -1,42 +1,42 @@
 import sys
 from types import ModuleType
 
-# --- ここから：Python 3.12+ 用の最強のおまじない（比較機能付き） ---
+# --- 【最強版】Python 3.12/3.13用 エラー回避コード ---
 if 'distutils' not in sys.modules:
-    d = ModuleType("distutils")
-    dv = ModuleType("distutils.version")
-    class LooseVersion:
-        def __init__(self, v): self.v = str(v)
-        # 比較演算（< や >）に対応させるための設定
-        def __lt__(self, other): return False  # 最新のMatplotlibは3.2より後なので常にFalse
+    # 文字列としても振る舞い、かつ比較計算もできる「スーパー身代わり」を作成
+    class LooseVersion(str):
+        def __lt__(self, other): return False
         def __le__(self, other): return False
         def __gt__(self, other): return True
         def __ge__(self, other): return True
         def __eq__(self, other): return False
-    dv.LooseVersion = LooseVersion
-    d.version = dv
-    sys.modules["distutils"] = d
-    sys.modules["distutils.version"] = dv
+    
+    distutils = ModuleType("distutils")
+    version = ModuleType("distutils.version")
+    version.LooseVersion = LooseVersion
+    distutils.version = version
+    sys.modules["distutils"] = distutils
+    sys.modules["distutils.version"] = version
 # --- ここまで ---
 
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import japanize_matplotlib # これで今度こそエラーを突破できます！
+import japanize_matplotlib # これで今度こそ通過します！
 from collections import Counter
 import io
 
-# アプリのタイトル
-st.set_page_config(page_title="AIセミナーアンケート分析アプリ", layout="wide")
-st.title("🏗️ 建設業界向け：AIセミナーアンケート分析")
+# アプリのタイトル・設定
+st.set_page_config(page_title="AIセミナーアンケート分析 - シビルカレッジ", layout="wide")
+st.title("🏗️ シビルカレッジ：AIセミナーアンケート分析アプリ")
+st.caption("CSVファイルをアップロードするだけで、日本語の分析グラフを自動生成します。")
 
 # 1. ファイルアップローダー
 uploaded_file = st.file_uploader("アンケート結果（CSV）をアップロードしてください", type="csv")
 
 if uploaded_file is not None:
     # データの読み込み
-    # Colab同様、ヘッダー位置を特定
     bytes_data = uploaded_file.getvalue()
     lines = bytes_data.decode("utf-8-sig").splitlines()
     
@@ -48,7 +48,7 @@ if uploaded_file is not None:
             
     df = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
 
-    # 列名設定
+    # 列名設定（あなたのスプレッドシートの項目名に合わせています）
     cols = {
         'satisfaction': '本日のセミナーの内容はいかがでしたか？',
         'job': '現在の主な職域を教えてください。',
@@ -67,21 +67,22 @@ if uploaded_file is not None:
         return pd.Series(Counter(items)).sort_values()
 
     # --- 画面表示 ---
-    st.header("📊 分析結果")
+    st.header("📊 分析レポート")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("満足度")
-        fig, ax = plt.subplots()
-        df[cols['satisfaction']].value_counts().plot(kind='pie', autopct='%1.1f%%', startangle=140, ax=ax)
+        st.subheader("✅ セミナー満足度")
+        fig, ax = plt.subplots(figsize=(8, 8))
+        df[cols['satisfaction']].value_counts().plot(kind='pie', autopct='%1.1f%%', startangle=140, ax=ax, counterclock=False)
         ax.set_ylabel("")
         st.pyplot(fig)
 
     with col2:
-        st.subheader("参加者の職域")
+        st.subheader("👷 参加者の職域")
         fig, ax = plt.subplots()
         df[cols['job']].value_counts().sort_values().plot(kind='barh', ax=ax, color='skyblue')
+        ax.set_xlabel("回答数")
         st.pyplot(fig)
 
     st.divider()
@@ -89,17 +90,17 @@ if uploaded_file is not None:
     col3, col4 = st.columns(2)
     
     with col3:
-        st.subheader("業界の課題（複数回答）")
+        st.subheader("📉 業界が抱える課題")
         fig, ax = plt.subplots()
         split_and_count(cols['challenges']).plot(kind='barh', ax=ax, color='coral')
+        ax.set_xlabel("回答数")
         st.pyplot(fig)
 
     with col4:
-        st.subheader("AIで解決したい内容")
+        st.subheader("💡 AIに期待する解決内容")
         fig, ax = plt.subplots()
         split_and_count(cols['ai_needs']).plot(kind='barh', ax=ax, color='lightgreen')
+        ax.set_xlabel("回答数")
         st.pyplot(fig)
 
-    st.success("分析が完了しました！")
-
-
+    st.success("全ての分析が完了しました。")
