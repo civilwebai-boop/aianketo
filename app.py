@@ -28,7 +28,7 @@ sns.set(font=plt.rcParams['font.family'], style="whitegrid")
 
 # --- アプリの基本設定 ---
 st.set_page_config(page_title="AIセミナー全項目分析", layout="wide")
-st.title("🏗️ シビルウェブ：AIセミナー詳細分析")
+st.title("🏗️ シビルカレッジ：AIセミナー詳細分析")
 
 uploaded_file = st.file_uploader("アンケート結果（CSV）をアップロードしてください", type="csv")
 
@@ -61,7 +61,7 @@ if uploaded_file is not None:
             '今後の支援': find_col(['支援', '本格導入'])
         }
 
-        # 複数回答用（割合も計算して表示）
+        # 複数回答用（割合％のみを表示）
         def plot_multi(col_name, title, color):
             if not col_name: return
             items = []
@@ -73,71 +73,10 @@ if uploaded_file is not None:
             
             fig, ax = plt.subplots()
             counts.plot(kind='barh', ax=ax, color=color)
-            # 棒の横に割合(%)を表示
+            
+            # 棒の横に割合(%)のみを表示
             for i, v in enumerate(counts):
                 pct = (v / total_respondents) * 100
-                ax.text(v + 0.2, i, f'{v}人 ({pct:.1f}%)', va='center', fontsize=10)
+                ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
             
-            st.subheader(f"📊 {title}")
-            st.pyplot(fig)
-
-        # 単一回答・円グラフ用
-        def plot_single_pie(col_name, title):
-            if not col_name: return
-            fig, ax = plt.subplots()
-            df[col_name].value_counts().plot(kind='pie', autopct='%1.1f%%', startangle=140, ax=ax, counterclock=False)
-            ax.set_ylabel("")
-            st.subheader(f"✅ {title}")
-            st.pyplot(fig)
-
-        # 単一回答・棒グラフ用（★N列・P列向けに割合表示を追加）
-        def plot_single_bar_with_pct(col_name, title, color):
-            if not col_name: return
-            counts = df[col_name].value_counts().sort_values()
-            total = counts.sum()
-            
-            fig, ax = plt.subplots()
-            counts.plot(kind='barh', ax=ax, color=color)
-            
-            # 棒の横に「人数 (割合%)」を表示
-            for i, v in enumerate(counts):
-                pct = (v / total) * 100
-                ax.text(v + 0.2, i, f'{v}人 ({pct:.1f}%)', va='center', fontsize=10)
-            
-            # グラフの右側に余白を作る
-            ax.set_xlim(0, max(counts) * 1.3)
-            
-            st.subheader(f"👷 {title}")
-            st.pyplot(fig)
-
-        # --- 画面レイアウト ---
-        tab1, tab2 = st.tabs(["基本属性・満足度", "課題・ニーズ・支援"])
-
-        with tab1:
-            c1, c2 = st.columns(2)
-            with c1: plot_single_pie(target_cols['年代'], "年代")
-            with c2: plot_single_pie(target_cols['満足度'], "セミナー満足度")
-            
-            st.divider()
-            
-            c3, c4 = st.columns(2)
-            # N列(職域)とP列(活用状況)を割合表示付きに変更
-            with c3: plot_single_bar_with_pct(target_cols['職域'], "参加者の職域 (N列)", "skyblue")
-            with c4: plot_single_bar_with_pct(target_cols['活用状況'], "現在のAI活用状況 (P列)", "lightgreen")
-
-        with tab2:
-            st.info("複数回答の項目を集計しています（%は回答者数に対する割合）")
-            c5, c6 = st.columns(2)
-            with c5: plot_multi(target_cols['動機'], "参加の動機", "orange")
-            with c6: plot_multi(target_cols['課題'], "業界の課題", "coral")
-            
-            st.divider()
-            
-            c7, c8 = st.columns(2)
-            with c7: plot_multi(target_cols['AIニーズ'], "AIで解決したいこと", "plum")
-            with c8: plot_multi(target_cols['今後の支援'], "今後必要な支援", "gold")
-
-        st.success("全ての分析が完了しました！")
-
-    except Exception as e:
-        st.error(f"エラーが発生しました: {e}")
+            ax.set_xlim(0, max(counts) * 1.2) #
