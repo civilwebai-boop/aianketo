@@ -45,7 +45,7 @@ sns.set(font=plt.rcParams['font.family'], style="whitegrid")
 
 # --- アプリ設定 ---
 st.set_page_config(page_title="AIセミナー分析", layout="wide")
-st.title("🏗️ シビルカレッジ：AIセミナー詳細分析")
+st.title("🏗️ シビルウェブ：AIセミナー詳細分析")
 
 uploaded_file = st.file_uploader("アンケート結果（CSV）をアップロードしてください", type="csv")
 
@@ -148,3 +148,4 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"実行中にエラーが発生しました。CSVの形式を確認してください。: {e}")
+
