@@ -41,12 +41,11 @@ try:
 except:
     plt.rcParams['font.family'] = 'sans-serif'
 
-# グラフのデザイン設定（白背景）
 sns.set(font=plt.rcParams['font.family'], style="white")
 
-# --- 3. アプリの基本設定 ---
-st.set_page_config(page_title="AIセミナー全項目分析", layout="wide")
-st.title("🏗️ シビルウェブ：AIセミナー詳細分析")
+# --- 3. アプリ設定 ---
+st.set_page_config(page_title="AIセミナー・クロス分析", layout="wide")
+st.title("🏗️ シビルウェブ：AIセミナー詳細分析（フィルター機能付）")
 
 uploaded_file = st.file_uploader("アンケート結果（CSV）をアップロードしてください", type="csv")
 
@@ -60,16 +59,12 @@ if uploaded_file is not None:
                 header_idx = i
                 break
         
-        df = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
-
-        # --- 4. 母数（回答者数）の表示 ---
-        total_n = len(df)
-        st.metric(label="アンケート回答者数（母数）", value=f"{total_n} 名")
-        st.divider()
+        # 全データの読み込み
+        df_raw = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
 
         # 列名の特定
         def find_col(keywords):
-            for col in df.columns:
+            for col in df_raw.columns:
                 if any(k in col for k in keywords):
                     return col
             return None
@@ -85,11 +80,44 @@ if uploaded_file is not None:
             '今後の支援': find_col(['支援', '本格導入'])
         }
 
-        # --- 5. グラフ描画関数 ---
+        # --- 4. 【新機能】サイドバーでのデータ絞り込み ---
+        st.sidebar.header("🔍 データを絞り込む")
+        st.sidebar.write("気になる属性を選んでください。下のグラフが自動で切り替わります。")
 
-        # 複数回答用
+        # 年代フィルター
+        age_list = ["すべて"] + sorted(df_raw[target_cols['年代']].dropna().unique().tolist())
+        selected_age = st.sidebar.selectbox(f"🎂 {target_cols['年代']}", age_list)
+
+        # 職域フィルター
+        job_list = ["すべて"] + sorted(df_raw[target_cols['職域']].dropna().unique().tolist())
+        selected_job = st.sidebar.selectbox(f"👷 {target_cols['職域']}", job_list)
+
+        # 活用状況フィルター
+        usage_list = ["すべて"] + sorted(df_raw[target_cols['活用状況']].dropna().unique().tolist())
+        selected_usage = st.sidebar.selectbox(f"💻 {target_cols['活用状況']}", usage_list)
+
+        # フィルタリングの実行
+        df = df_raw.copy()
+        if selected_age != "すべて":
+            df = df[df[target_cols['年代']] == selected_age]
+        if selected_job != "すべて":
+            df = df[df[target_cols['職域']] == selected_job]
+        if selected_usage != "すべて":
+            df = df[df[target_cols['活用状況']] == selected_usage]
+
+        # --- 5. 母数表示 ---
+        total_n = len(df)
+        st.metric(label="現在の分析対象（母数）", value=f"{total_n} 名")
+        if total_n < len(df_raw):
+            st.warning(f"※全 {len(df_raw)} 名のうち、条件に合う {total_n} 名を表示中")
+        st.divider()
+
+        # --- 6. グラフ描画関数 ---
+
         def plot_multi_with_pct(col_name, title, color):
-            if not col_name or df[col_name].dropna().empty: return
+            if not col_name or df[col_name].dropna().empty: 
+                st.info(f"「{title}」のデータはありません。")
+                return
             items = []
             for row in df[col_name].dropna():
                 parts = str(row).replace('\r', '').split(';')
@@ -103,19 +131,17 @@ if uploaded_file is not None:
             for i, v in enumerate(counts):
                 pct = (v / total_respondents) * 100
                 ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
-            
-            # --- ここで「縦の設問文字」を消し、線を設定 ---
-            ax.set_ylabel("")                   # 左側の設問テキストを消去
-            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線（目安）を出す
-            ax.yaxis.grid(False)                # 横線を消す
-            
-            ax.set_xlim(0, max(counts) * 1.3)
+            ax.set_ylabel("")
+            ax.xaxis.grid(True, linestyle='--', alpha=0.6)
+            ax.yaxis.grid(False)
+            ax.set_xlim(0, max(counts) * 1.3 if not counts.empty else 1)
             st.subheader(f"📊 {title}")
             st.pyplot(fig)
 
-        # 単一回答・棒グラフ用
         def plot_single_bar_with_pct(col_name, title, color):
-            if not col_name or df[col_name].dropna().empty: return
+            if not col_name or df[col_name].dropna().empty: 
+                st.info(f"「{title}」のデータはありません。")
+                return
             counts = df[col_name].value_counts().sort_values()
             total = counts.sum()
             fig, ax = plt.subplots()
@@ -123,26 +149,24 @@ if uploaded_file is not None:
             for i, v in enumerate(counts):
                 pct = (v / total) * 100
                 ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
-            
-            # --- ここで「縦の設問文字」を消し、線を設定 ---
-            ax.set_ylabel("")                   # 左側の設問テキストを消去
-            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線（目安）を出す
-            ax.yaxis.grid(False)                # 横線を消す
-            
-            ax.set_xlim(0, max(counts) * 1.3)
+            ax.set_ylabel("")
+            ax.xaxis.grid(True, linestyle='--', alpha=0.6)
+            ax.yaxis.grid(False)
+            ax.set_xlim(0, max(counts) * 1.3 if not counts.empty else 1)
             st.subheader(f"👷 {title}")
             st.pyplot(fig)
 
-        # 円グラフ
         def plot_single_pie(col_name, title):
-            if not col_name or df[col_name].dropna().empty: return
+            if not col_name or df[col_name].dropna().empty: 
+                st.info(f"「{title}」のデータはありません。")
+                return
             fig, ax = plt.subplots()
             df[col_name].value_counts().plot(kind='pie', autopct='%1.1f%%', startangle=140, ax=ax, counterclock=False)
             ax.set_ylabel("")
             st.subheader(f"✅ {title}")
             st.pyplot(fig)
 
-        # --- 6. 画面レイアウト ---
+        # --- 7. 画面レイアウト ---
         tab1, tab2 = st.tabs(["基本属性・満足度", "課題・ニーズ・支援"])
 
         with tab1:
@@ -166,8 +190,6 @@ if uploaded_file is not None:
             c7, c8 = st.columns(2)
             with c7: plot_multi_with_pct(target_cols['AIニーズ'], "AIで解決したい内容 (R列)", "plum")
             with c8: plot_multi_with_pct(target_cols['今後の支援'], "今後必要な支援 (S列)", "gold")
-
-        st.success("全ての分析が完了しました！")
 
     except Exception as e:
         st.error(f"実行中にエラーが発生しました。: {e}")
