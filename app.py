@@ -61,6 +61,10 @@ if uploaded_file is not None:
         
         df = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
 
+        # 母数（回答者数）の表示を付け足す
+        total_n = len(df)
+        st.metric(label="今回のアンケート回答者数（母数）", value=f"{total_n} 名")
+        st.divider()
         def find_col(keywords):
             for col in df.columns:
                 if any(k in col for k in keywords):
@@ -148,4 +152,5 @@ if uploaded_file is not None:
 
     except Exception as e:
         st.error(f"実行中にエラーが発生しました。CSVの形式を確認してください。: {e}")
+
 
