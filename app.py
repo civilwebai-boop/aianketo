@@ -8,7 +8,7 @@ import io
 import os
 import sys
 
-# --- 1. Python 3.12/3.13用 エラー回避コード（おまじない） ---
+# --- 1. Python 3.12/3.13用 エラー回避コード ---
 if 'distutils' not in sys.modules:
     from types import ModuleType
     class LooseVersion(str):
@@ -25,7 +25,7 @@ if 'distutils' not in sys.modules:
     sys.modules["distutils"] = distutils
     sys.modules["distutils.version"] = version
 
-# --- 2. 日本語フォントの設定（ライブラリ不具合の回避策） ---
+# --- 2. 日本語フォントの設定 ---
 try:
     font_path = None
     for v in ["3.13", "3.12", "3.11"]:
@@ -41,8 +41,8 @@ try:
 except:
     plt.rcParams['font.family'] = 'sans-serif'
 
-# グラフの全体デザイン設定
-sns.set(font=plt.rcParams['font.family'], style="whitegrid")
+# グラフのデザイン設定（白背景）
+sns.set(font=plt.rcParams['font.family'], style="white")
 
 # --- 3. アプリの基本設定 ---
 st.set_page_config(page_title="AIセミナー全項目分析", layout="wide")
@@ -67,7 +67,7 @@ if uploaded_file is not None:
         st.metric(label="アンケート回答者数（母数）", value=f"{total_n} 名")
         st.divider()
 
-        # 列名の自動特定
+        # 列名の特定
         def find_col(keywords):
             for col in df.columns:
                 if any(k in col for k in keywords):
@@ -85,7 +85,7 @@ if uploaded_file is not None:
             '今後の支援': find_col(['支援', '本格導入'])
         }
 
-        # --- 5. グラフ描画関数（全グラフ割合入り・縦線なし） ---
+        # --- 5. グラフ描画関数 ---
 
         # 複数回答用
         def plot_multi_with_pct(col_name, title, color):
@@ -103,7 +103,11 @@ if uploaded_file is not None:
             for i, v in enumerate(counts):
                 pct = (v / total_respondents) * 100
                 ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
-            ax.xaxis.grid(False) # 縦線を消す
+            
+            # --- グリッド線の設定 ---
+            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線は出す（点線）
+            ax.yaxis.grid(False) # 横線は消す
+            
             ax.set_xlim(0, max(counts) * 1.3)
             st.subheader(f"📊 {title}")
             st.pyplot(fig)
@@ -118,12 +122,16 @@ if uploaded_file is not None:
             for i, v in enumerate(counts):
                 pct = (v / total) * 100
                 ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
-            ax.xaxis.grid(False) # 縦線を消す
+            
+            # --- グリッド線の設定 ---
+            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線は出す
+            ax.yaxis.grid(False) # 横線は消す
+            
             ax.set_xlim(0, max(counts) * 1.3)
             st.subheader(f"👷 {title}")
             st.pyplot(fig)
 
-        # 単一回答・円グラフ用
+        # 円グラフ
         def plot_single_pie(col_name, title):
             if not col_name or df[col_name].dropna().empty: return
             fig, ax = plt.subplots()
