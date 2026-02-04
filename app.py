@@ -104,9 +104,10 @@ if uploaded_file is not None:
                 pct = (v / total_respondents) * 100
                 ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
             
-            # --- グリッド線の設定 ---
-            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線は出す（点線）
-            ax.yaxis.grid(False) # 横線は消す
+            # --- ここで「縦の設問文字」を消し、線を設定 ---
+            ax.set_ylabel("")                   # 左側の設問テキストを消去
+            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線（目安）を出す
+            ax.yaxis.grid(False)                # 横線を消す
             
             ax.set_xlim(0, max(counts) * 1.3)
             st.subheader(f"📊 {title}")
@@ -123,9 +124,10 @@ if uploaded_file is not None:
                 pct = (v / total) * 100
                 ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
             
-            # --- グリッド線の設定 ---
-            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線は出す
-            ax.yaxis.grid(False) # 横線は消す
+            # --- ここで「縦の設問文字」を消し、線を設定 ---
+            ax.set_ylabel("")                   # 左側の設問テキストを消去
+            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線（目安）を出す
+            ax.yaxis.grid(False)                # 横線を消す
             
             ax.set_xlim(0, max(counts) * 1.3)
             st.subheader(f"👷 {title}")
