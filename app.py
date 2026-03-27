@@ -1,51 +1,10 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import matplotlib.font_manager as fm
-from collections import Counter
 import io
-import os
-import sys
 
-# --- 1. Python 3.12/3.13用 エラー回避コード ---
-if 'distutils' not in sys.modules:
-    from types import ModuleType
-    class LooseVersion(str):
-        def __repr__(self): return f"LooseVersion('{self}')"
-        def __lt__(self, other): return False
-        def __le__(self, other): return False
-        def __gt__(self, other): return True
-        def __ge__(self, other): return True
-        def __eq__(self, other): return False
-    distutils = ModuleType("distutils")
-    version = ModuleType("distutils.version")
-    version.LooseVersion = LooseVersion
-    distutils.version = version
-    sys.modules["distutils"] = distutils
-    sys.modules["distutils.version"] = version
-
-# --- 2. 日本語フォントの設定 ---
-try:
-    font_path = None
-    for v in ["3.13", "3.12", "3.11"]:
-        p = f'/home/adminuser/venv/lib/python{v}/site-packages/japanize_matplotlib/fonts/ipaexg.ttf'
-        if os.path.exists(p):
-            font_path = p
-            break
-    if font_path:
-        fm.fontManager.addfont(font_path)
-        plt.rcParams['font.family'] = fm.FontProperties(fname=font_path).get_name()
-    else:
-        plt.rcParams['font.family'] = 'sans-serif'
-except:
-    plt.rcParams['font.family'] = 'sans-serif'
-
-sns.set(font=plt.rcParams['font.family'], style="white")
-
-# --- 3. アプリ設定 ---
-st.set_page_config(page_title="AIセミナー総合分析", layout="wide")
-st.title("🏗️ シビルウェブ：AIセミナー詳細分析アプリ")
+# --- 1. アプリ設定 ---
+st.set_page_config(page_title="要望抽出ダッシュボード", layout="wide")
+st.title("🏗️ シビルウェブ：生の声・要望抽出（重複排除版）")
 
 uploaded_file = st.file_uploader("アンケート結果（CSV）をアップロードしてください", type="csv")
 
@@ -59,131 +18,89 @@ if uploaded_file is not None:
                 header_idx = i
                 break
         
-        # 全データの読み込み
+        # 読み込み時に最初から重複を排除する（ユーザーIDなどでユニークにする）
         df_raw = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
-
-        # 列名のマッピング（L列〜T列）
-        # 列番号で指定することで確実に取得します
-        target_cols = {
-            '年代': df_raw.columns[11],          # L
-            '満足度': df_raw.columns[12],        # M
-            '職域': df_raw.columns[13],          # N
-            '動機': df_raw.columns[14],          # O (複数)
-            '活用状況': df_raw.columns[15],      # P
-            '課題': df_raw.columns[16],          # Q (複数)
-            'AIニーズ': df_raw.columns[17],      # R (複数)
-            '導入の障壁': df_raw.columns[18],    # S (複数)
-            '今後の支援': df_raw.columns[19]     # T (複数)
-        }
-
-        # --- 4. サイドバーでのフィルタリング（クロス分析） ---
-        st.sidebar.header("🔍 データを絞り込む")
         
-        # 年代フィルター
-        age_list = ["すべて"] + sorted(df_raw[target_cols['年代']].dropna().unique().tolist())
-        selected_age = st.sidebar.selectbox(f"🎂 {target_cols['年代']}", age_list)
+        # 重要：同じ回答者が複数行にまたがっている場合、最初の1行だけを採用する
+        # （複数回答の分解による重複を防ぐため、元の「ユーザー ID」や「送信日時」で一意にします）
+        df_raw = df_raw.drop_duplicates(subset=[df_raw.columns[1], df_raw.columns[4]])
 
-        # 職域フィルター
-        job_list = ["すべて"] + sorted(df_raw[target_cols['職域']].dropna().unique().tolist())
-        selected_job = st.sidebar.selectbox(f"👷 {target_cols['職域']}", job_list)
+        col_age = df_raw.columns[11]   # L: 年代
+        col_job = df_raw.columns[13]   # N: 職域
+        col_text = df_raw.columns[20]  # U: 自由記述
 
-        # 活用状況フィルター
-        usage_list = ["すべて"] + sorted(df_raw[target_cols['活用状況']].dropna().unique().tolist())
-        selected_usage = st.sidebar.selectbox(f"💻 {target_cols['活用状況']}", usage_list)
-
-        # データの絞り込み実行
-        df = df_raw.copy()
-        if selected_age != "すべて":
-            df = df[df[target_cols['年代']] == selected_age]
-        if selected_job != "すべて":
-            df = df[df[target_cols['職域']] == selected_job]
-        if selected_usage != "すべて":
-            df = df[df[target_cols['活用状況']] == selected_usage]
-
-        # --- 5. 母数表示 ---
-        total_n = len(df)
-        st.metric(label="分析対象の回答者数（母数）", value=f"{total_n} 名")
-        if total_n < len(df_raw):
-            st.info(f"全 {len(df_raw)} 名から絞り込み中")
-        st.divider()
-
-        # --- 6. グラフ描画関数 ---
-
-        def plot_multi_with_pct(col_name, title, color):
-            if not col_name or df[col_name].dropna().empty:
-                st.info(f"「{title}」のデータはありません。")
-                return
-            items = []
-            for row in df[col_name].dropna():
-                parts = str(row).replace('\r', '').split(';')
-                items.extend([p.strip() for p in parts if p.strip()])
-            if not items: return
-            counts = pd.Series(Counter(items)).sort_values()
-            total_respondents = len(df[col_name].dropna())
+        # --- 2. 分類ロジック ---
+        def analyze_comment(c):
+            c = str(c)
+            # 要望・懸念キーワード
+            req_keys = ["もっと", "事例", "具体例", "セキュリティ", "不安", "懸念", "難しい", "少ない", "価格", "コスト", "踏み込ん", "実例", "導入方法", "正確性"]
+            # 良い意見キーワード
+            pos_keys = ["参考", "分かりやす", "良かっ", "楽しみ", "期待", "有意義", "感謝", "助かり"]
             
-            fig, ax = plt.subplots()
-            counts.plot(kind='barh', ax=ax, color=color)
-            for i, v in enumerate(counts):
-                pct = (v / total_respondents) * 100
-                ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
-            ax.set_ylabel("") # 左の設問テキストを消す
-            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線あり
-            ax.yaxis.grid(False) # 横線なし
-            ax.set_xlim(0, max(counts) * 1.3 if not counts.empty else 1)
-            st.subheader(f"📊 {title}")
-            st.pyplot(fig)
+            sentiment = "その他"
+            if any(k in c for k in req_keys): sentiment = "⚠️ 改善要望・懸念"
+            elif any(k in c for k in pos_keys): sentiment = "✅ いい意見・期待"
+            
+            cats = []
+            if any(k in c for k in ["セキュリティ", "不安", "正確性"]): cats.append("🔒 セキュリティ・信頼性")
+            if any(k in c for k in ["事例", "具体例", "実例", "デモ"]): cats.append("💡 事例・デモ要望")
+            if any(k in c for k in ["もっと", "難しい", "深い", "踏み込ん"]): cats.append("📚 内容の深掘り希望")
+            if any(k in c for k in ["コスト", "価格", "予算", "有料"]): cats.append("💰 コスト・導入費用")
+            if not cats: cats.append("💬 その他一般")
+            
+            return sentiment, cats
 
-        def plot_single_bar_with_pct(col_name, title, color):
-            if not col_name or df[col_name].dropna().empty:
-                st.info(f"「{title}」のデータはありません。")
-                return
-            counts = df[col_name].value_counts().sort_values()
-            total = counts.sum()
-            fig, ax = plt.subplots()
-            counts.plot(kind='barh', ax=ax, color=color)
-            for i, v in enumerate(counts):
-                pct = (v / total) * 100
-                ax.text(v + 0.1, i, f'{pct:.1f}%', va='center', fontsize=10, fontweight='bold')
-            ax.set_ylabel("") # 左の設問テキストを消す
-            ax.xaxis.grid(True, linestyle='--', alpha=0.6) # 縦線あり
-            ax.yaxis.grid(False) # 横線なし
-            ax.set_xlim(0, max(counts) * 1.3 if not counts.empty else 1)
-            st.subheader(f"👷 {title}")
-            st.pyplot(fig)
+        # 自由記述がある行だけを抽出（「特になし」等は除外）
+        df_text = df_raw.dropna(subset=[col_text]).copy()
+        df_text = df_text[~df_text[col_text].str.contains("特になし|なし|ありません|特にありません", na=False)]
+        
+        results = []
+        for _, row in df_text.iterrows():
+            sent, cats = analyze_comment(row[col_text])
+            results.append({
+                "年代": row[col_age],
+                "職域": row[col_job],
+                "回答内容": row[col_text],
+                "タイプ": sent,
+                "カテゴリー": cats
+            })
+        df_final = pd.DataFrame(results)
 
-        def plot_single_pie(col_name, title):
-            if not col_name or df[col_name].dropna().empty: return
-            fig, ax = plt.subplots()
-            df[col_name].value_counts().plot(kind='pie', autopct='%1.1f%%', startangle=140, ax=ax, counterclock=False)
-            ax.set_ylabel("")
-            st.subheader(f"✅ {title}")
-            st.pyplot(fig)
+        # --- 3. サイドバー・フィルター ---
+        st.sidebar.header("🔍 絞り込み条件")
+        
+        sel_type = st.sidebar.radio("1. 意見のタイプを選択", ["すべて表示", "⚠️ 改善要望・懸念のみ", "✅ いい意見のみ"])
+        
+        flat_cats = sorted(list(set([c for sub in df_final["カテゴリー"] for c in sub])))
+        sel_cats = st.sidebar.multiselect("2. 気になるテーマ（複数選択可）", options=flat_cats, default=flat_cats)
 
-        # --- 7. 画面レイアウト（3つのタブで整理） ---
-        tab1, tab2, tab3 = st.tabs(["基本属性・状況", "動機・課題・ニーズ", "障壁・支援ニーズ"])
+        st.sidebar.divider()
+        sel_job = st.sidebar.multiselect("3. 職域で絞り込む", options=sorted(df_final["職域"].unique()), default=sorted(df_final["職域"].unique()))
 
-        with tab1:
-            c1, c2 = st.columns(2)
-            with c1: plot_single_pie(target_cols['年代'], "年代 (L列)")
-            with c2: plot_single_pie(target_cols['満足度'], "満足度 (M列)")
-            st.divider()
-            c3, c4 = st.columns(2)
-            with c3: plot_single_bar_with_pct(target_cols['職域'], "主な職域 (N列)", "skyblue")
-            with c4: plot_single_bar_with_pct(target_cols['活用状況'], "現在のAI活用状況 (P列)", "lightgreen")
+        # フィルター適用
+        mask = (df_final["職域"].isin(sel_job)) & \
+               (df_final["カテゴリー"].apply(lambda x: any(c in sel_cats for c in x)))
+        
+        if sel_type == "⚠️ 改善要望・懸念のみ":
+            mask = mask & (df_final["タイプ"] == "⚠️ 改善要望・懸念")
+        elif sel_type == "✅ いい意見のみ":
+            mask = mask & (df_final["タイプ"] == "✅ いい意見・期待")
+            
+        df_filtered = df_final[mask]
 
-        with tab2:
-            c5, c6 = st.columns(2)
-            with c5: plot_multi_with_pct(target_cols['動機'], "参加の動機 (O列)", "orange")
-            with c6: plot_multi_with_pct(target_cols['課題'], "業界の課題 (Q列)", "coral")
-            st.divider()
-            plot_multi_with_pct(target_cols['AIニーズ'], "AIで解決・時短したい内容 (R列)", "plum")
-
-        with tab3:
-            c7, c8 = st.columns(2)
-            with c7: plot_multi_with_pct(target_cols['導入の障壁'], "実業務導入への障壁 (S列)", "indianred")
-            with c8: plot_multi_with_pct(target_cols['今後の支援'], "今後必要な支援 (T列)", "gold")
-
-        st.success("全ての分析が完了しました。左のメニューで自由に絞り込んでください。")
+        # --- 4. 表示 ---
+        st.metric(label="抽出された声の件数", value=f"{len(df_filtered)} 件")
+        
+        if len(df_filtered) == 0:
+            st.warning("条件に合うコメントが見つかりませんでした。")
+        else:
+            for _, row in df_filtered.iterrows():
+                # カード形式で表示
+                with st.chat_message("user", avatar="💬"):
+                    st.write(f"**{row['年代']} | {row['職域']}**")
+                    st.write(f"タイプ: {row['タイプ']}")
+                    st.write(f"テーマ: {', '.join(row['カテゴリー'])}")
+                    st.info(row["回答内容"])
 
     except Exception as e:
-        st.error(f"実行中にエラーが発生しました: {e}")
+        st.error(f"エラーが発生しました: {e}")
