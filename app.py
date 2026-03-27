@@ -59,64 +59,65 @@ if uploaded_file is not None:
                 header_idx = i
                 break
         
-        # 全データの読み込み
         df_raw = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
 
-        # --- 【重要】重複排除の処理を追加 ---
-        # ユーザーID（1列目）と送信日時（4列目）が一致する行を1つに絞ります
+        # --- 【修正】回答者単位での重複排除 ---
         df_raw = df_raw.drop_duplicates(subset=[df_raw.columns[1], df_raw.columns[4]])
 
-        # 列名のマッピング（L列〜T列）
         target_cols = {
             '年代': df_raw.columns[11],          # L
             '満足度': df_raw.columns[12],        # M
             '職域': df_raw.columns[13],          # N
-            '動機': df_raw.columns[14],          # O (複数)
+            '動機': df_raw.columns[14],          # O
             '活用状況': df_raw.columns[15],      # P
-            '課題': df_raw.columns[16],          # Q (複数)
-            'AIニーズ': df_raw.columns[17],      # R (複数)
-            '導入の障壁': df_raw.columns[18],    # S (複数)
-            '今後の支援': df_raw.columns[19]     # T (複数)
+            '課題': df_raw.columns[16],          # Q
+            'AIニーズ': df_raw.columns[17],      # R
+            '導入の障壁': df_raw.columns[18],    # S
+            '今後の支援': df_raw.columns[19]     # T
         }
 
-        # --- 4. サイドバーでのフィルタリング ---
+        # --- 4. フィルタリング ---
         st.sidebar.header("🔍 データを絞り込む")
-        
         age_list = ["すべて"] + sorted(df_raw[target_cols['年代']].dropna().unique().tolist())
         selected_age = st.sidebar.selectbox(f"🎂 {target_cols['年代']}", age_list)
-
         job_list = ["すべて"] + sorted(df_raw[target_cols['職域']].dropna().unique().tolist())
         selected_job = st.sidebar.selectbox(f"👷 {target_cols['職域']}", job_list)
-
-        usage_list = ["すべて"] + sorted(df_raw[target_cols['活用状況']].dropna().unique().tolist())
-        selected_usage = st.sidebar.selectbox(f"💻 {target_cols['活用状況']}", usage_list)
 
         df = df_raw.copy()
         if selected_age != "すべて":
             df = df[df[target_cols['年代']] == selected_age]
         if selected_job != "すべて":
             df = df[df[target_cols['職域']] == selected_job]
-        if selected_usage != "すべて":
-            df = df[df[target_cols['活用状況']] == selected_usage]
 
         # --- 5. 母数表示 ---
-        total_n = len(df)
-        st.metric(label="分析対象の回答者数（母数）", value=f"{total_n} 名")
-        if total_n < len(df_raw):
-            st.info(f"全 {len(df_raw)} 名から絞り込み中")
+        st.metric(label="分析対象の回答者数（母数）", value=f"{len(df)} 名")
         st.divider()
 
-        # --- 6. グラフ描画関数 ---
+        # --- 6. グラフ描画関数（名寄せ機能付き） ---
 
         def plot_multi_with_pct(col_name, title, color):
             if not col_name or df[col_name].dropna().empty:
                 st.info(f"「{title}」のデータはありません。")
                 return
+            
             items = []
             for row in df[col_name].dropna():
+                # セミコロンで分割
                 parts = str(row).replace('\r', '').split(';')
-                items.extend([p.strip() for p in parts if p.strip()])
+                for p in parts:
+                    p_clean = p.strip()
+                    # --- 【ここがポイント】名寄せ処理 ---
+                    # 「プロンプト」が含まれる項目を統一
+                    if "プロンプト" in p_clean: p_clean = "プロンプト活用の不足・スキル不足"
+                    # 「テンプレート」が含まれる項目を統一
+                    elif "テンプレート" in p_clean: p_clean = "AIテンプレート・ツールの提供"
+                    # その他、極端に短いものや重複しやすいものを整理
+                    if p_clean:
+                        items.append(p_clean)
+
             if not items: return
+            
+            # 名寄せ後の集計
             counts = pd.Series(Counter(items)).sort_values()
             total_respondents = len(df[col_name].dropna())
             
@@ -133,9 +134,7 @@ if uploaded_file is not None:
             st.pyplot(fig)
 
         def plot_single_bar_with_pct(col_name, title, color):
-            if not col_name or df[col_name].dropna().empty:
-                st.info(f"「{title}」のデータはありません。")
-                return
+            if not col_name or df[col_name].dropna().empty: return
             counts = df[col_name].value_counts().sort_values()
             total = counts.sum()
             fig, ax = plt.subplots()
@@ -146,7 +145,7 @@ if uploaded_file is not None:
             ax.set_ylabel("")
             ax.xaxis.grid(True, linestyle='--', alpha=0.6)
             ax.yaxis.grid(False)
-            ax.set_xlim(0, max(counts) * 1.3 if not counts.empty else 1)
+            ax.set_xlim(0, max(counts) * 1.3)
             st.subheader(f"👷 {title}")
             st.pyplot(fig)
 
@@ -158,8 +157,8 @@ if uploaded_file is not None:
             st.subheader(f"✅ {title}")
             st.pyplot(fig)
 
-        # --- 7. 画面レイアウト ---
-        tab1, tab2, tab3 = st.tabs(["基本属性・状況", "動機・課題・ニーズ", "障壁・支援ニーズ"])
+        # --- 7. レイアウト ---
+        tab1, tab2, tab3 = st.tabs(["基本属性", "動機・課題・ニーズ", "障壁・支援ニーズ"])
 
         with tab1:
             c1, c2 = st.columns(2)
@@ -171,18 +170,16 @@ if uploaded_file is not None:
             with c4: plot_single_bar_with_pct(target_cols['活用状況'], "現在のAI活用状況 (P列)", "lightgreen")
 
         with tab2:
-            c5, c6 = st.columns(2)
-            with c5: plot_multi_with_pct(target_cols['動機'], "参加の動機 (O列)", "orange")
-            with c6: plot_multi_with_pct(target_cols['課題'], "業界の課題 (Q列)", "coral")
+            plot_multi_with_pct(target_cols['動機'], "参加の動機 (O列)", "orange")
             st.divider()
-            plot_multi_with_pct(target_cols['AIニーズ'], "AIで解決・時短したい内容 (R列)", "plum")
+            plot_multi_with_pct(target_cols['課題'], "業界の課題 (Q列)", "coral")
+            st.divider()
+            plot_multi_with_pct(target_cols['AIニーズ'], "AIで解決したい内容 (R列)", "plum")
 
         with tab3:
-            c7, c8 = st.columns(2)
-            with c7: plot_multi_with_pct(target_cols['導入の障壁'], "実業務導入への障壁 (S列)", "indianred")
-            with c8: plot_multi_with_pct(target_cols['今後の支援'], "今後必要な支援 (T列)", "gold")
-
-        st.success("全ての分析が完了しました。")
+            plot_multi_with_pct(target_cols['導入の障壁'], "実業務導入への障壁 (S列)", "indianred")
+            st.divider()
+            plot_multi_with_pct(target_cols['今後の支援'], "今後必要な支援 (T列)", "gold")
 
     except Exception as e:
-        st.error(f"実行中にエラーが発生しました: {e}")
+        st.error(f"エラーが発生しました: {e}")
