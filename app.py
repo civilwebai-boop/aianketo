@@ -94,7 +94,7 @@ if uploaded_file is not None:
         st.metric(label="分析対象の回答者数（母数）", value=f"{len(df)} 名")
         st.divider()
 
-        # --- 6. グラフ描画関数（強力クリーニング版） ---
+        # --- 6. グラフ描画関数（最強クリーニング版） ---
 
         def plot_multi_with_pct(col_name, title, color):
             if not col_name or df[col_name].dropna().empty:
@@ -103,15 +103,15 @@ if uploaded_file is not None:
             
             items = []
             for row in df[col_name].dropna():
-                # セミコロンで分割
                 parts = str(row).split(';')
                 for p in parts:
-                    # --- 【ここが修正ポイント】改行・タブ・前後の空白をすべて消去 ---
-                    p_clean = p.replace('\n', '').replace('\r', '').replace('\t', '').strip()
+                    # --- 【修正】あらゆる空白・改行・制御文字を完全に除去 ---
+                    p_clean = re.sub(r'\s+', '', p) 
                     
-                    # 名寄せ処理
-                    if "プロンプト" in p_clean: p_clean = "プロンプト活用の不足・スキル不足"
-                    elif "テンプレート" in p_clean: p_clean = "AIテンプレート・ツールの提供"
+                    # 名寄せ（特定のキーワードが含まれていれば正規化）
+                    if "プロンプト活用研修" in p_clean: p_clean = "【教育事業】各部門のリーダー向け「プロンプト活用研修」"
+                    elif "AI基礎・実践研修" in p_clean: p_clean = "【教育事業】全社員を対象とした「AI基礎・実践研修」の実施"
+                    elif "AIテンプレート" in p_clean: p_clean = "【AIコンテンツ】建設業に特化したAIテンプレート・ツールの提供"
                     
                     if p_clean:
                         items.append(p_clean)
@@ -133,6 +133,7 @@ if uploaded_file is not None:
             st.subheader(f"📊 {title}")
             st.pyplot(fig)
 
+        # (中略：他の関数は変更なし)
         def plot_single_bar_with_pct(col_name, title, color):
             if not col_name or df[col_name].dropna().empty: return
             counts = df[col_name].value_counts().sort_values()
@@ -157,7 +158,6 @@ if uploaded_file is not None:
             st.subheader(f"✅ {title}")
             st.pyplot(fig)
 
-        # --- 7. レイアウト ---
         tab1, tab2, tab3 = st.tabs(["基本属性", "動機・課題・ニーズ", "障壁・支援ニーズ"])
 
         with tab1:
