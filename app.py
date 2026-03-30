@@ -7,6 +7,7 @@ from collections import Counter
 import io
 import os
 import sys
+import re
 
 # --- 1. Python 3.12/3.13用 エラー回避コード ---
 if 'distutils' not in sys.modules:
@@ -45,7 +46,7 @@ sns.set(font=plt.rcParams['font.family'], style="white")
 
 # --- 3. アプリ設定 ---
 st.set_page_config(page_title="AIセミナー総合分析", layout="wide")
-st.title("🏗️ シビルカレッジ：AIセミナー詳細分析アプリ")
+st.title("🏗️ シビルウェブ：AIセミナー詳細分析アプリ")
 
 uploaded_file = st.file_uploader("アンケート結果（CSV）をアップロードしてください", type="csv")
 
@@ -61,19 +62,19 @@ if uploaded_file is not None:
         
         df_raw = pd.read_csv(io.BytesIO(bytes_data), skiprows=header_idx, encoding='utf-8-sig')
 
-        # --- 【修正】回答者単位での重複排除 ---
+        # 重複回答者排除
         df_raw = df_raw.drop_duplicates(subset=[df_raw.columns[1], df_raw.columns[4]])
 
         target_cols = {
-            '年代': df_raw.columns[11],          # L
-            '満足度': df_raw.columns[12],        # M
-            '職域': df_raw.columns[13],          # N
-            '動機': df_raw.columns[14],          # O
-            '活用状況': df_raw.columns[15],      # P
-            '課題': df_raw.columns[16],          # Q
-            'AIニーズ': df_raw.columns[17],      # R
-            '導入の障壁': df_raw.columns[18],    # S
-            '今後の支援': df_raw.columns[19]     # T
+            '年代': df_raw.columns[11],
+            '満足度': df_raw.columns[12],
+            '職域': df_raw.columns[13],
+            '動機': df_raw.columns[14],
+            '活用状況': df_raw.columns[15],
+            '課題': df_raw.columns[16],
+            'AIニーズ': df_raw.columns[17],
+            '導入の障壁': df_raw.columns[18],
+            '今後の支援': df_raw.columns[19]
         }
 
         # --- 4. フィルタリング ---
@@ -93,7 +94,7 @@ if uploaded_file is not None:
         st.metric(label="分析対象の回答者数（母数）", value=f"{len(df)} 名")
         st.divider()
 
-        # --- 6. グラフ描画関数（名寄せ機能付き） ---
+        # --- 6. グラフ描画関数（強力クリーニング版） ---
 
         def plot_multi_with_pct(col_name, title, color):
             if not col_name or df[col_name].dropna().empty:
@@ -103,21 +104,20 @@ if uploaded_file is not None:
             items = []
             for row in df[col_name].dropna():
                 # セミコロンで分割
-                parts = str(row).replace('\r', '').split(';')
+                parts = str(row).split(';')
                 for p in parts:
-                    p_clean = p.strip()
-                    # --- 【ここがポイント】名寄せ処理 ---
-                    # 「プロンプト」が含まれる項目を統一
+                    # --- 【ここが修正ポイント】改行・タブ・前後の空白をすべて消去 ---
+                    p_clean = p.replace('\n', '').replace('\r', '').replace('\t', '').strip()
+                    
+                    # 名寄せ処理
                     if "プロンプト" in p_clean: p_clean = "プロンプト活用の不足・スキル不足"
-                    # 「テンプレート」が含まれる項目を統一
                     elif "テンプレート" in p_clean: p_clean = "AIテンプレート・ツールの提供"
-                    # その他、極端に短いものや重複しやすいものを整理
+                    
                     if p_clean:
                         items.append(p_clean)
 
             if not items: return
             
-            # 名寄せ後の集計
             counts = pd.Series(Counter(items)).sort_values()
             total_respondents = len(df[col_name].dropna())
             
